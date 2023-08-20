@@ -124,17 +124,13 @@ func ytdlpDownload(
     ctx *DownloadCtx, downloadCtxs chan *DownloadCtx, errs chan *DownloadCtx) {
 
     cmd := exec.Command(YT_DLP, ctx.link)
-    stdout, err := cmd.Output()
+    _, err := cmd.Output()
     if err != nil {
         ctx.err = &err
         ctx.status = JOB_STATUS_ERR
         errs <- ctx
         return
     }
-    title := string(stdout)
-    title = strings.TrimSpace(title)
-    ctx.title = title
-
     downloadCtxs <- ctx
     
 }
