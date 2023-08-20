@@ -28,52 +28,55 @@ type DownloadCtx struct {
 
 func Download(links *[]string) {
     // Start and manage goroutines here
-    // Now get titles only
     downloadCtxsChan := make(chan *DownloadCtx)
-    getTitleErrChan := make(chan *DownloadCtx)
+    var jobs []DownloadCtx
+
     startedGoRoutines := 0
     pw := progress.NewWriter()
+    pw.SetStyle(progress.StyleDefault)
     pw.SetTrackerLength(10)
     pw.SetNumTrackersExpected(len(*links))
-    pw.SetStyle(progress.StyleDefault)
     pw.SetUpdateFrequency(time.Millisecond * 100)
+    pw.Style().Colors = progress.StyleColorsExample
+    pw.SetTrackerPosition(progress.PositionLeft)
     pw.Style().Visibility.ETA = false
-	pw.Style().Colors = progress.StyleColorsExample
+    pw.Style().Visibility.ETAOverall = false
     pw.Style().Visibility.Speed = false
     pw.Style().Visibility.Percentage = false
     pw.Style().Visibility.Value = false
     pw.Style().Visibility.TrackerOverall = true
+    pw.Style().Options.TimeInProgressPrecision = time.Second
+    pw.Style().Options.TimeDonePrecision = time.Second
 
     go pw.Render()
 
     for _, val := range *links {
         ctx := createDownloadCtx(val)
 
+        jobs = append(jobs, *ctx)
+
         pw.AppendTracker(ctx.tracker)
 
-        go startJob(&ctx, downloadCtxsChan, getTitleErrChan)
+        go startJob(ctx, downloadCtxsChan)
         startedGoRoutines++
     }
 
-    for startedGoRoutines > 0 {
-        select {
-        case ctx := <- downloadCtxsChan:
-            ctx.tracker.UpdateMessage(ctx.title)
-            startedGoRoutines--
-            
-        case ctx := <- getTitleErrChan:
+    for i := 0; i < startedGoRoutines; i++ {
+        ctx := <- downloadCtxsChan
+        if ctx.err != nil {
             ctx.tracker.MarkAsErrored()
-            startedGoRoutines--
-        }
+        } else {
+            ctx.tracker.MarkAsDone()
+        } 
     }
 
- 
+    time.Sleep(time.Millisecond * 100)
     pw.Stop()
-
     for pw.IsRenderInProgress() {}
+
 }
 
-func createDownloadCtx(link string) DownloadCtx {
+func createDownloadCtx(link string) *DownloadCtx {
     var ctx DownloadCtx
     ctx.tracker = &progress.Tracker{}
     ctx.tracker.SetValue(0)
@@ -81,31 +84,25 @@ func createDownloadCtx(link string) DownloadCtx {
     ctx.tracker.Units = progress.UnitsDefault
     ctx.link = link
     ctx.status = JOB_STATUS_NEW
-    return ctx
+    return &ctx
 }
 
-func startJob(
-    ctx *DownloadCtx, downloadCtxs chan *DownloadCtx, errs chan *DownloadCtx) {
+func startJob(ctx *DownloadCtx, downloadCtxs chan *DownloadCtx) {
     
     getTitle(ctx)
 
     if ctx.err != nil {
-        errs <- ctx
+        downloadCtxs <- ctx
         return
     }
     ctx.tracker.UpdateMessage(ctx.title)
 
-    ytdlpDownload(ctx, downloadCtxs, errs)
-
-    if ctx.err != nil {
-        errs <- ctx
-        return
-    }
+    ytdlpDownload(ctx, downloadCtxs)
 
     downloadCtxs <- ctx
 }
-func getTitle(
-    ctx *DownloadCtx) {
+
+func getTitle(ctx *DownloadCtx) {
 
     cmd := exec.Command(YT_DLP, YT_DLP_FLAG_GET_TITLE, ctx.link)
     stdout, err := cmd.Output()
@@ -121,16 +118,16 @@ func getTitle(
 }
 
 func ytdlpDownload(
-    ctx *DownloadCtx, downloadCtxs chan *DownloadCtx, errs chan *DownloadCtx) {
+    ctx *DownloadCtx, downloadCtxs chan *DownloadCtx) {
 
     cmd := exec.Command(YT_DLP, ctx.link)
     _, err := cmd.Output()
     if err != nil {
         ctx.err = &err
         ctx.status = JOB_STATUS_ERR
-        errs <- ctx
+        downloadCtxs <- ctx
         return
     }
-    downloadCtxs <- ctx
-    
+    ctx.status = JOB_STATUS_COMPLETED
+
 }
