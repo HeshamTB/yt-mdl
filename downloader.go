@@ -89,16 +89,21 @@ func createDownloadCtx(link string) *DownloadCtx {
 
 func startJob(ctx *DownloadCtx, downloadCtxs chan *DownloadCtx) {
     
-    getTitle(ctx)
+    c := make(chan int)
+    go func(c chan int) {
+        getTitle(ctx)
 
-    if ctx.err != nil {
-        downloadCtxs <- ctx
-        return
-    }
-    ctx.tracker.UpdateMessage(ctx.title)
+        if ctx.err != nil {
+            downloadCtxs <- ctx
+            return
+        }
+        ctx.tracker.UpdateMessage(ctx.title)
+        c <- 0
+    }(c)
 
     ytdlpDownload(ctx, downloadCtxs)
 
+    <- c // Ensure to return only after
     downloadCtxs <- ctx
 }
 
