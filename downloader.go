@@ -11,6 +11,8 @@ import (
 
 const YT_DLP string = "yt-dlp"
 const YT_DLP_FLAG_GET_TITLE string = "--get-title"
+const YT_DLP_FLAG_EMBED_METADATA string = "--embed-metadata"
+const YT_DLP_FLAG_CONCURRENT_FRAGMENTS string = "--concurrent-fragments 4"
 
 const JOB_STATUS_NEW = 1
 const JOB_STATUS_COMPLETED = 2
@@ -109,7 +111,13 @@ func startJob(ctx *DownloadCtx, downloadCtxs chan *DownloadCtx) {
 
 func getTitle(ctx *DownloadCtx) {
 
-    cmd := exec.Command(YT_DLP, YT_DLP_FLAG_GET_TITLE, ctx.link)
+    cmd := exec.Command(
+        YT_DLP, 
+        YT_DLP_FLAG_GET_TITLE,
+        YT_DLP_FLAG_EMBED_METADATA,
+        YT_DLP_FLAG_CONCURRENT_FRAGMENTS,
+        ctx.link,
+    )
     stdout, err := cmd.Output()
     if err != nil {
         ctx.err = &err
